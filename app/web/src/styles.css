@@ -1,0 +1,88 @@
+:root {
+  --bg: #0b0d12;
+  --surface: #151922;
+  --surface-2: #1d2230;
+  --surface-3: #262c3d;
+  --text: #eef0f6;
+  --muted: #8a91a5;
+  --faint: #5b6275;
+  --accent: #6c8cff;
+  --accent-2: #9b7bff;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --border: rgba(255, 255, 255, .07);
+  --radius: 22px;
+  --radius-sm: 14px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f2f3f7; --surface: #ffffff; --surface-2: #f3f4f8; --surface-3: #e7e9f0;
+    --text: #141821; --muted: #626a7e; --faint: #9aa1b2;
+    --border: rgba(0, 0, 0, .07); --shadow: 0 10px 30px rgba(20, 24, 33, .08);
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  font-size: 15px; line-height: 1.4; min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; }
+input { font: inherit; }
+
+.btn {
+  border: none; border-radius: 14px; padding: 13px 18px; font-weight: 600; cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff;
+  transition: transform .12s ease, opacity .2s;
+}
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.ghost { background: var(--surface-2); color: var(--text); }
+.btn.danger { background: rgba(248, 113, 113, .14); color: var(--danger); }
+
+.field {
+  width: 100%; padding: 14px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font-size: 16px; outline: none;
+  transition: border-color .15s;
+}
+.field:focus { border-color: var(--accent); }
+
+/* Switch iOS-like */
+.switch { width: 52px; height: 32px; border-radius: 999px; background: var(--surface-3); position: relative;
+  border: none; padding: 0; cursor: pointer; transition: background .2s; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); transition: transform .22s cubic-bezier(.3,1.4,.6,1); }
+.switch.on { background: var(--ok); }
+.switch.on::after { transform: translateX(20px); }
+.switch:disabled { opacity: .4; cursor: default; }
+
+/* Range */
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 34px; background: transparent; }
+input[type=range]::-webkit-slider-runnable-track { height: 34px; border-radius: 12px; background: var(--track, var(--surface-3)); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 30px; height: 30px; margin-top: 2px;
+  border-radius: 10px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+input[type=range]::-moz-range-track { height: 34px; border-radius: 12px; background: var(--track, var(--surface-3)); }
+input[type=range]::-moz-range-thumb { width: 30px; height: 30px; border: none; border-radius: 10px; background: #fff; }
+
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  background: var(--surface-3); color: var(--text); padding: 12px 18px; border-radius: 14px; box-shadow: var(--shadow);
+  font-size: 14px; z-index: 50; max-width: calc(100vw - 32px); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* Indicador de carga dentro de un botón: <button [attr.aria-busy]="x"> @if (x) {<span class="spin"></span>} … */
+.btn .spin { display: inline-block; width: 16px; height: 16px; margin-right: 8px; vertical-align: -3px; border-radius: 50%;
+  border: 2px solid currentColor; border-top-color: transparent; animation: btn-spin .8s linear infinite; }
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .btn .spin { animation-duration: 2.4s; } }
+.btn[aria-busy="true"]:disabled { opacity: 1; cursor: progress; }
+.switch[aria-busy="true"] { opacity: .75; cursor: progress; animation: sw-wait .7s ease-in-out infinite alternate; }
+@keyframes sw-wait { to { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .switch[aria-busy="true"] { animation: none; } }

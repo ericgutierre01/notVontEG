@@ -1,0 +1,189 @@
+<main class="page">
+  <nav class="top">
+    <a [routerLink]="back()" class="back" aria-label="Volver">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    <h1>{{ wifiMode ? 'Cambiar Wi-Fi' : 'Agregar aparato' }}</h1>
+  </nav>
+
+  @if (!supported) {
+    <section class="panel">
+      <h2>Este navegador no puede usar Bluetooth</h2>
+      <p>Esto usa Bluetooth desde el navegador, y eso solo funciona en <strong>Chrome o Edge</strong> en Mac, Windows o
+        Android. En iPhone/iPad no es posible (Apple no lo permite).</p>
+      <p class="note">Abre esta misma página en Chrome en tu Mac. El resto de la app sí funciona en cualquier navegador.</p>
+    </section>
+  } @else {
+
+  @switch (step()) {
+
+    @case ('type') {
+      <section class="panel">
+        <h2>¿Qué vas a agregar?</h2>
+        <div class="types">
+          @for (p of catalog(); track p.productCode) {
+            <button class="type" (click)="choose(p.productCode)">
+              @if (p.image) { <img [src]="p.image" alt="" loading="lazy"> } @else { <span class="ph"></span> }
+              <span>{{ p.name }}</span>
+            </button>
+          }
+        </div>
+        <button class="btn ghost wide" (click)="choose(0)">No sé el modelo: buscar todos</button>
+      </section>
+    }
+
+    @case ('prepare') {
+      <section class="panel">
+        @if (wifiMode) {
+          <h2>Acércate al aparato</h2>
+          @if (target(); as t) {
+            <p class="note">Le vas a mandar una red Wi-Fi nueva a <strong>{{ t.name }}</strong> por Bluetooth.
+              Sigue en tu cuenta: no se borra ni pierde sus horarios. No hace falta ponerlo en modo emparejamiento.</p>
+            @if (!t.mac) { <p class="err">La nube no dio la MAC de este aparato: no se podrá comprobar cuál eliges.</p> }
+          }
+        } @else {
+          <div class="chosen">
+            @if (product()?.image) { <img [src]="product()!.image" alt=""> }
+            <h2>{{ product()?.name ?? 'Cualquier aparato Vont' }}</h2>
+          </div>
+          @if (!readsMac) {
+            <div class="heads-up">
+              <strong>Antes: deja que Chrome lea la MAC solo</strong>
+              <p>Sin esto, la app te pedirá la MAC, que viene en una etiqueta del aparato (en el bombillo, abajo: no se ve si ya está puesto).
+                Se hace una sola vez:</p>
+              <ol>
+                <li><button class="btn ghost small" type="button" (click)="copyFlags()">{{ copied() ? '¡Copiado!' : 'Copiar enlace' }}</button>
+                  y pégalo en una pestaña nueva <span class="faint">(Chrome no deja que una página lo abra directo)</span>.</li>
+                <li>En <em>Experimental Web Platform features</em> elige <strong>Enabled</strong> y toca <strong>Relaunch</strong>.</li>
+              </ol>
+              @if (knownMacs().length) { <p>Si es uno que ya tuviste en tu cuenta, no hace falta: la app ya conoce su MAC.</p> }
+            </div>
+          }
+          <img class="howto" src="https://file.topband-cloud.com/topband/tsmart/product/network/network.gif"
+               alt="El aparato conectado con su luz parpadeando rápido">
+          <p><strong>Prende el aparato y confirma que su luz parpadea rápido.</strong> Así viene de fábrica o después de desvincularlo.</p>
+          <details class="note small">
+            <summary>¿No parpadea?</summary>
+            @if (!isPlug()) { <p>Bombillo: con el interruptor, apágalo y préndelo 3 veces seguidas hasta que parpadee rápido.</p> }
+            @if (!isBulb()) { <p>Enchufe: mantén presionado su botón unos 5 segundos hasta que la luz parpadee rápido.</p> }
+            <p>Si ya estaba en tu cuenta, ponerlo en este modo lo desconecta; al terminar queda otra vez en tu cuenta.</p>
+          </details>
+          <p class="note small">Ten la Mac cerca del aparato (a pocos metros).</p>
+        }
+
+        <div class="wifi">
+          @if (!editWifi()) {
+            <div class="saved">
+              <span>Red Wi-Fi: <strong>{{ ssid }}</strong></span>
+              <button class="link" type="button" (click)="editWifi.set(true)">Cambiar</button>
+            </div>
+          } @else {
+            <p class="note">Red Wi-Fi {{ wifiMode ? 'nueva' : '' }} (solo <strong>2.4 GHz</strong>). La contraseña va
+              directo al aparato por Bluetooth: no pasa por ningún servidor.</p>
+            <label>Nombre de la red
+              <input class="field" [(ngModel)]="ssid" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+            <label>Contraseña
+              <div class="pass">
+                <input class="field" [type]="showPass ? 'text' : 'password'" [(ngModel)]="password" autocomplete="off">
+                <button class="btn ghost" type="button" (click)="showPass = !showPass">{{ showPass ? 'Ocultar' : 'Ver' }}</button>
+              </div>
+            </label>
+            <label class="check"><input type="checkbox" [(ngModel)]="remember"> Recordar esta red en este navegador</label>
+            @if (ssid && !remember) { <button class="link" type="button" (click)="forgetWifi()">Olvidar la red guardada</button> }
+          }
+        </div>
+
+        @if (error()) { <p class="err" role="alert">{{ error() }}</p> }
+        <button class="btn wide" [disabled]="!ssid || (wifiMode && !target()) || busy()" (click)="scan()" [attr.aria-busy]="!!busy()">
+          @if (busy()) {
+            <span class="spin" aria-hidden="true"></span> {{ busy() }}
+          } @else {
+            {{ wifiMode ? 'Buscar el aparato' : (isBulb() || isPlug() ? 'Ya parpadea: buscar' : 'Ya parpadea: buscar todos') }}
+          }
+        </button>
+        <p class="note small">Chrome abrirá una ventana con los aparatos cercanos{{ productCode ? ' de este tipo' : '' }}:
+          elige el tuyo y lo demás sigue solo. El Bluetooth de estos aparatos no tiene cifrado, así que elige solo uno que sea tuyo.</p>
+        @if (!wifiMode) {
+          <button class="link" type="button" (click)="step.set('type')">Elegir otro tipo</button>
+        }
+      </section>
+    }
+
+    @case ('identify') {
+      <section class="panel">
+        <h2>¿Cuál es su MAC?</h2>
+        @if (knownMacs().length) {
+          <p class="note">Si es uno de estos, tócalo:</p>
+          <div class="known">
+            @for (k of knownMacs(); track k.mac) {
+              <button class="chip" [class.on]="mac === k.mac" (click)="mac = k.mac">{{ k.name }} <code>{{ k.mac }}</code></button>
+            }
+          </div>
+          <p class="note">Si es otro, escríbela:</p>
+        } @else {
+          <p class="note">Tu Chrome no deja leerla sola. Viene en la etiqueta del aparato o en la caja
+            (12 caracteres, por ejemplo <code>7c:df:a1:a0:7e:d8</code>).</p>
+        }
+        @if (!productCode) {
+          <label>Tipo de aparato
+            <select class="field" [ngModel]="productCode" (ngModelChange)="choose($event, false)">
+              <option [ngValue]="0" disabled>Elige…</option>
+              @for (c of catalog(); track c.productCode) { <option [ngValue]="c.productCode">{{ c.name }}</option> }
+            </select>
+          </label>
+        }
+        <label>MAC
+          <input class="field mono" [(ngModel)]="mac" placeholder="a1b2c3d4e5f6" autocapitalize="off" spellcheck="false">
+        </label>
+        <p class="note small">Para que se lea sola: en <code>chrome://flags</code> activa
+          <em>Experimental Web Platform features</em> y reinicia Chrome.</p>
+        <div class="row2">
+          <button class="btn ghost" (click)="step.set('prepare')">Atrás</button>
+          <button class="btn" [disabled]="!validMac() || !productCode" (click)="pair()">Conectar</button>
+        </div>
+      </section>
+    }
+
+    @case ('pairing') {
+      <section class="panel">
+        <h2>{{ wifiMode ? 'Cambiando el Wi-Fi…' : 'Conectando…' }}</h2>
+        <ol class="log">
+          @for (l of log(); track $index) { <li [class]="l.state"><span class="ic"></span>{{ l.text }}</li> }
+        </ol>
+        <p class="note">No cierres esta página ni alejes la Mac del aparato.</p>
+      </section>
+    }
+
+    @case ('done') {
+      <section class="panel center">
+        <div class="big-ok">✓</div>
+        <h2>{{ wifiMode ? '¡Wi-Fi cambiado!' : '¡Aparato agregado!' }}</h2>
+        <p class="note">{{ wifiMode ? 'Ya está conectado a la red nueva.' : 'Ya está en tu cuenta y conectado a internet.' }}</p>
+        <button class="btn wide" (click)="openNew()">Abrir el aparato</button>
+      </section>
+    }
+
+    @case ('fail') {
+      <section class="panel">
+        <h2>{{ wifiMode ? 'No se pudo cambiar el Wi-Fi' : 'No se pudo conectar' }}</h2>
+        <ol class="log">
+          @for (l of log(); track $index) { <li [class]="l.state"><span class="ic"></span>{{ l.text }}</li> }
+        </ol>
+        <p class="err">{{ error() }}</p>
+        @if (wifiMode) {
+          <p class="note">Revisa que la contraseña sea correcta y que la red sea de 2.4 GHz. Si el aparato no aparece por
+            Bluetooth, ponlo en modo emparejamiento y usa <a routerLink="/add">Agregar aparato</a>: vuelve a quedar en tu cuenta.</p>
+        } @else {
+          <p class="note">Revisa que el aparato siga parpadeando rápido (si no, repite el paso para ponerlo así), que la
+            contraseña sea correcta y que la red sea de 2.4 GHz.</p>
+        }
+        <div class="row2">
+          <a class="btn ghost" [routerLink]="back()">Salir</a>
+          <button class="btn" (click)="retry()">Reintentar</button>
+        </div>
+      </section>
+    }
+  }
+  }
+</main>

@@ -1,0 +1,255 @@
+<main class="page" [style.--glow]="glow()">
+  <nav class="top">
+    <a routerLink="/" class="back" aria-label="Volver">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    @if (d(); as dev) {
+      <div class="title">
+        <h1>{{ dev.name }}</h1>
+        <p class="sub">
+          @if (online()) { <span class="dot ok"></span>En línea } @else { <span class="dot off"></span>Sin conexión }
+          · {{ dev.model }}
+        </p>
+      </div>
+    }
+  </nav>
+
+  @if (error()) {
+    <p class="empty">{{ error() }}</p>
+  } @else if (!d()) {
+    <div class="hero skeleton"></div>
+  } @else {
+    @if (!online()) {
+      <div class="banner">Este aparato está sin conexión. Revisa que esté enchufado y con Wi-Fi; los controles se activan cuando vuelva.</div>
+    }
+
+    <section class="hero" [class.lit]="on()">
+      <button class="power" [class.on]="on()" [disabled]="!online()" (click)="togglePower()"
+              [attr.aria-label]="on() ? 'Apagar' : 'Encender'">
+        <device-icon [bulb]="bulb()" [size]="40" />
+      </button>
+      <p class="state">{{ online() ? '' : 'Último estado: ' }}{{ on() ? 'Encendido' : 'Apagado' }}
+        @if (bulb() && on()) { · {{ mode() === 'white' ? 'Blanco' : mode() === 'scene' ? 'Escena' : 'Color' }} }
+      </p>
+    </section>
+
+    <div class="tabs" role="tablist">
+      @for (t of tabs(); track t.key) {
+        <button role="tab" [class.active]="tab() === t.key" [attr.aria-selected]="tab() === t.key"
+                (click)="tab.set(t.key)">{{ t.label }}</button>
+      }
+    </div>
+
+    <fieldset [disabled]="!online()">
+
+    <!-- ================= CONTROL ================= -->
+    @if (tab() === 'control') {
+      @if (bulb()) {
+        <section class="panel">
+          <div class="label"><span>Brillo</span><strong>{{ brightness() }}%</strong></div>
+          <input type="range" min="1" max="100" [ngModel]="brightness()"
+                 (ngModelChange)="setBrightness($event)" style="--track: linear-gradient(90deg, #2a2f3d, var(--glow))"
+                 aria-label="Brillo">
+        </section>
+
+        <section class="panel">
+          <div class="seg" role="radiogroup" aria-label="Modo de luz">
+            <button [class.active]="mode() === 'color'" (click)="setColor(color())">Color</button>
+            <button [class.active]="mode() === 'white'" (click)="setWhite()">Blanco</button>
+            <button [class.active]="mode() === 'scene'" (click)="tab.set('scenes')">Escenas</button>
+          </div>
+
+          @if (mode() === 'white') {
+            @if (hasTemp()) {
+              <div class="label"><span>Temperatura</span><strong>{{ temp() }}</strong></div>
+              <input type="range" min="0" max="100" [ngModel]="temp()" (ngModelChange)="setTemp($event)"
+                     style="--track: linear-gradient(90deg, #ffb35c, #fff4e0, #cfe3ff)" aria-label="Temperatura de blanco">
+              <div class="ends"><span>Cálido</span><span>Frío</span></div>
+            } @else {
+              <p class="note">Este modelo tiene un solo tono de blanco cálido; ajusta la intensidad con el brillo.</p>
+            }
+          } @else {
+            <div class="swatches">
+              @for (c of presets; track c) {
+                <button class="sw" [style.background]="c" [class.sel]="c === color() && mode() === 'color'"
+                        (click)="setColor(c)" [attr.aria-label]="'Color ' + c"></button>
+              }
+              <label class="sw custom" title="Elegir cualquier color">
+                <input type="color" [value]="color()" (change)="setColor($any($event.target).value)" aria-label="Color personalizado">
+                <span>+</span>
+              </label>
+            </div>
+          }
+        </section>
+      } @else {
+        <section class="panel list">
+          <div class="item">
+            <div><strong>Luz indicadora</strong><span>El LED del enchufe</span></div>
+            <button class="switch" [class.on]="v('Plug_status_light') === 'true'" (click)="toggleLed()"
+                    aria-label="Luz indicadora"></button>
+          </div>
+        </section>
+      }
+    }
+
+    <!-- ================= ESCENAS ================= -->
+    @if (tab() === 'scenes') {
+      @for (g of groups; track g.title) {
+        <section class="panel">
+          <h2>{{ g.title }}</h2>
+          <div class="chips">
+            @for (s of g.scenes; track s.id) {
+              <button class="chip" [class.active]="scene() === s.id" (click)="setScene(s.id, s.name)">{{ s.name }}</button>
+            }
+          </div>
+        </section>
+      }
+    }
+
+    <!-- ================= HORARIO ================= -->
+    @if (tab() === 'schedule') {
+      @if (bulb()) {
+        <section class="panel">
+          <div class="item">
+            <div><strong>Horario automático</strong><span>Se guarda en el bombillo: funciona aunque no haya internet</span></div>
+            <button class="switch" [class.on]="bulbTimer().enabled"
+                    (click)="patchBulbTimer({ enabled: !bulbTimer().enabled })" aria-label="Activar horario"></button>
+          </div>
+          <div class="seg">
+            <button [class.active]="bulbTimer().onAtStart" (click)="patchBulbTimer({ onAtStart: true })">Encender y luego apagar</button>
+            <button [class.active]="!bulbTimer().onAtStart" (click)="patchBulbTimer({ onAtStart: false })">Apagar y luego encender</button>
+          </div>
+          <div class="times">
+            <label>{{ bulbTimer().onAtStart ? 'Enciende' : 'Apaga' }}
+              <input class="field" type="time" [ngModel]="hhmm(bulbTimer().start)"
+                     (ngModelChange)="patchBulbTimer({ start: fromHHMM($event) })"></label>
+            <label>{{ bulbTimer().onAtStart ? 'Apaga' : 'Enciende' }}
+              <input class="field" type="time" [ngModel]="hhmm(bulbTimer().end)"
+                     (ngModelChange)="patchBulbTimer({ end: fromHHMM($event) })"></label>
+          </div>
+          <div class="days">
+            @for (dn of days; track $index) {
+              <button class="day" [class.active]="hasDay(bulbTimer().days, $index)" (click)="toggleDay('bulb', $index)">{{ dn }}</button>
+            }
+          </div>
+          <p class="note">{{ daysLabel(bulbTimer().days) }}</p>
+          <button class="btn wide" (click)="saveBulbTimer()" [disabled]="!!working()" [attr.aria-busy]="working() === 'save'">@if (working() === 'save') {<span class="spin" aria-hidden="true"></span>Guardando…} @else {Guardar horario}</button>
+        </section>
+      } @else {
+        <section class="panel">
+          <div class="item">
+            <div><strong>Horario</strong><span>Se guarda en el enchufe</span></div>
+            <button class="switch" [class.on]="plugTimer().enabled"
+                    (click)="patchPlugTimer({ enabled: !plugTimer().enabled })" aria-label="Activar horario"></button>
+          </div>
+          <div class="seg">
+            <button [class.active]="plugTimer().turnOn" (click)="patchPlugTimer({ turnOn: true })">Encender</button>
+            <button [class.active]="!plugTimer().turnOn" (click)="patchPlugTimer({ turnOn: false })">Apagar</button>
+          </div>
+          <div class="times">
+            <label>A las
+              <input class="field" type="time" [ngModel]="hhmm(plugTimer().at)"
+                     (ngModelChange)="patchPlugTimer({ at: fromHHMM($event) })"></label>
+          </div>
+          <div class="days">
+            @for (dn of days; track $index) {
+              <button class="day" [class.active]="hasDay(plugTimer().days, $index)" (click)="toggleDay('plug', $index)">{{ dn }}</button>
+            }
+          </div>
+          <p class="note">{{ daysLabel(plugTimer().days) }}</p>
+          <button class="btn wide" (click)="savePlugTimer()" [disabled]="!!working()" [attr.aria-busy]="working() === 'save'">@if (working() === 'save') {<span class="spin" aria-hidden="true"></span>Guardando…} @else {Guardar horario}</button>
+        </section>
+
+        <section class="panel">
+          <h2>Cuenta regresiva</h2>
+          @if (countdownLeft()) {
+            <p class="big">{{ countdown().turnOn ? 'Se enciende' : 'Se apaga' }} en {{ fmtLeft(countdownLeft()) }}</p>
+            <button class="btn danger wide" (click)="cancelCountdown()" [disabled]="!!working()" [attr.aria-busy]="working() === 'save'">@if (working() === 'save') {<span class="spin" aria-hidden="true"></span>Cancelando…} @else {Cancelar}</button>
+          } @else {
+            <div class="seg">
+              <button [class.active]="!countdownOn()" (click)="countdownOn.set(false)">Apagar en…</button>
+              <button [class.active]="countdownOn()" (click)="countdownOn.set(true)">Encender en…</button>
+            </div>
+            <div class="chips">
+              @for (m of [15, 30, 60, 120, 240]; track m) {
+                <button class="chip" [class.active]="countdownMin() === m" (click)="countdownMin.set(m)">
+                  {{ m < 60 ? m + ' min' : m / 60 + ' h' }}</button>
+              }
+            </div>
+            <label class="inline">Minutos
+              <input class="field" type="number" min="1" max="1440" [ngModel]="countdownMin()"
+                     (ngModelChange)="countdownMin.set(+$event)"></label>
+            <button class="btn wide" (click)="startCountdown()" [disabled]="!!working()" [attr.aria-busy]="working() === 'save'">@if (working() === 'save') {<span class="spin" aria-hidden="true"></span>Iniciando…} @else {Iniciar}</button>
+          }
+        </section>
+      }
+    }
+
+    </fieldset>
+
+    <!-- ================= AJUSTES ================= -->
+    @if (tab() === 'settings') {
+      <section class="panel list">
+        <div class="item">
+          <div><strong>Nombre</strong>
+            @if (!editingName()) { <span>{{ d()!.name }}</span> }
+          </div>
+          @if (editingName()) {
+            <form class="rename" (ngSubmit)="saveName()">
+              <input class="field" name="n" [(ngModel)]="newName" maxlength="64" autofocus>
+              <button class="btn" type="submit" [disabled]="!!working()" [attr.aria-busy]="working() === 'rename'">@if (working() === 'rename') {<span class="spin" aria-hidden="true"></span>Guardando…} @else {Guardar}</button>
+            </form>
+          } @else {
+            <button class="btn ghost" (click)="startRename()">Cambiar</button>
+          }
+        </div>
+        @if (has('Vacation_mode') || has('vacation_mode')) {
+          <div class="item">
+            <div><strong>Modo vacaciones</strong><span>Enciende y apaga al azar para simular que hay alguien en casa</span></div>
+            <button class="switch" [class.on]="vacation()" [disabled]="!online()" (click)="toggleVacation()"
+                    aria-label="Modo vacaciones"></button>
+          </div>
+        }
+      </section>
+
+      <section class="panel list">
+        <div class="item"><div><strong>Modelo</strong></div><span class="val">{{ d()!.model }}</span></div>
+        <div class="item"><div><strong>Firmware</strong></div><span class="val">{{ d()!.firmware || '—' }}</span></div>
+        <div class="item"><div><strong>Señal Wi-Fi</strong></div>
+          <span class="val bars" [attr.aria-label]="'Señal ' + signalBars() + ' de 4'">
+            @for (b of [1,2,3,4]; track b) { <i [class.on]="b <= signalBars()" [style.height.px]="4 + b * 3"></i> }
+            <small>{{ d()!.signal }} dBm</small>
+          </span>
+        </div>
+        <div class="item"><div><strong>Estado</strong></div>
+          <span class="val">{{ online() ? 'En línea' : 'Sin conexión' }}</span></div>
+        @if (d()!.mac) {
+          <div class="item"><div><strong>MAC</strong></div><span class="val">{{ d()!.mac }}</span></div>
+        }
+        <a class="item" [routerLink]="['/device', d()!.id, 'wifi']">
+          <div><strong>Red Wi-Fi</strong><small>Cámbiala si cambiaste de router o de contraseña</small></div>
+          <span class="val">Cambiar ›</span>
+        </a>
+      </section>
+
+      <section class="panel danger-zone">
+        <h2>Zona peligrosa</h2>
+        @if (!confirmUnbind()) {
+          <p class="note">Desvincular quita el aparato de tu cuenta. Para volver a usarlo, agrégalo de nuevo con el botón + (por Bluetooth, en Chrome).</p>
+          <button class="btn danger wide" (click)="confirmUnbind.set(true)">Desvincular aparato</button>
+        } @else {
+          <p class="note">Escribe <strong>{{ d()!.name }}</strong> para confirmar.</p>
+          <input class="field" [(ngModel)]="unbindName" [placeholder]="d()!.name">
+          <div class="row2">
+            <button class="btn ghost" [disabled]="working() === 'unbind'" (click)="confirmUnbind.set(false); unbindName = ''">Cancelar</button>
+            <button class="btn danger" [disabled]="unbindName !== d()!.name || !!working()" [attr.aria-busy]="working() === 'unbind'"
+                    (click)="unbind()">@if (working() === 'unbind') {<span class="spin" aria-hidden="true"></span>Desvinculando…} @else {Desvincular}</button>
+          </div>
+        }
+      </section>
+    }
+  }
+
+  @if (toast()) { <div class="toast" role="status">{{ toast() }}</div> }
+</main>

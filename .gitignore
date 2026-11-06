@@ -1,0 +1,26 @@
+# Secretos y datos locales: nunca al repo
+.env
+token.json
+*.local.json
+web.config.local
+appsettings.Production.json
+
+# .NET
+bin/
+obj/
+*.user
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+build/
+lambda.zip
+
+# Sistema
+.DS_Store

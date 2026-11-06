@@ -1,0 +1,14 @@
+# .NET
+bin/
+obj/
+*.user
+appsettings.*.local.json
+# Node / Angular
+node_modules/
+dist/
+.angular/
+# OS
+.DS_Store
+
+# secrets
+.env

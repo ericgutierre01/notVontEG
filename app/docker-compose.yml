@@ -1,0 +1,47 @@
+# Despliegue de Vont Casa: Caddy (HTTPS) -> Web (Angular/nginx) -> API (.NET).
+# SQL Server es EXTERNO (tu instancia); se pasa por la cadena de conexión.
+# Copia .env.example a .env, rellena los valores y: docker compose up -d --build
+# El dominio (DOMAIN) debe apuntar a la IP del VPS para que Caddy obtenga el certificado.
+services:
+  api:
+    build: ./src/VontCasa.Api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: ${CONNECTION_STRING}
+      Security__JwtKey: ${JWT_KEY}
+      Security__EncryptionKey: ${ENCRYPTION_KEY}
+      Cors__Origins__0: https://${DOMAIN}
+      Security__BehindProxy: "true"   # llega por Caddy → nginx
+    expose:
+      - "8080"   # solo red interna; nunca publicado al host
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      - api
+    volumes:
+      # Editable sin recompilar: cambia web/public/config.json en el servidor y recarga la página
+      - ./web/public/config.json:/usr/share/nginx/html/config.json:ro
+    expose:
+      - "80"     # solo red interna; Caddy es el único punto de entrada
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

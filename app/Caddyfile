@@ -1,0 +1,5 @@
+# TLS automático (Let's Encrypt) delante de la web; redirige HTTP->HTTPS solo.
+{$DOMAIN} {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy web:80
+}
