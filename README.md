@@ -9,6 +9,19 @@ agrega aparatos por Bluetooth, les cambia el Wi-Fi y los conecta a Alexa.
 > para indicar con qué aparatos es compatible. Úsalo con tus propios aparatos y bajo tu
 > responsabilidad.
 
+## Capturas
+
+<p align="center">
+  <img src="docs/capturas/inicio.png" width="240" alt="Inicio: todos los aparatos con su estado">
+  <img src="docs/capturas/bombillo-color.png" width="240" alt="Bombillo: brillo y color">
+  <img src="docs/capturas/escenas.png" width="240" alt="Escenas del bombillo">
+</p>
+<p align="center">
+  <img src="docs/capturas/horario.png" width="240" alt="Horario automático guardado en el bombillo">
+  <img src="docs/capturas/enchufe.png" width="240" alt="Enchufe">
+  <img src="docs/capturas/login.png" width="240" alt="Entrar con la cuenta de Vont">
+</p>
+
 ## Qué hay aquí
 
 | Carpeta | Qué es |
