@@ -45,7 +45,33 @@
 
     <!-- ================= CONTROL ================= -->
     @if (tab() === 'control') {
-      @if (bulb()) {
+      @if (fan()) {
+        <section class="panel list">
+          <div class="item">
+            <div><strong>Luz</strong></div>
+            <button class="switch" [class.on]="v('light') === 'true'" (click)="toggle('light')" aria-label="Luz del abanico"></button>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="label"><span>Velocidad</span><strong>{{ speed() ? speed() : 'Apagado' }}</strong></div>
+          <div class="chips" role="radiogroup" aria-label="Velocidad">
+            @for (n of [0,1,2,3,4,5,6]; track n) {
+              <button class="chip" [class.active]="speed() === n" (click)="setSpeed(n)">{{ n === 0 ? 'Apagar' : n }}</button>
+            }
+          </div>
+        </section>
+        <section class="panel list">
+          <div class="item">
+            <div><strong>Dirección inversa</strong><span>Para invierno: empuja el aire caliente hacia abajo</span></div>
+            <button class="switch" [class.on]="v('fan_reverse') === 'true'" (click)="toggle('fan_reverse')" aria-label="Dirección inversa"></button>
+          </div>
+          <div class="item">
+            <div><strong>Viento natural</strong><span>Cambia la velocidad sola, como brisa</span></div>
+            <button class="switch" [class.on]="v('breeze') === 'true'" (click)="toggle('breeze')" aria-label="Viento natural"></button>
+          </div>
+        </section>
+        <p class="note">El abanico no informa su estado: si usas el control físico, aquí se ve lo último que se pidió desde la app.</p>
+      } @else if (bulb()) {
         <section class="panel">
           <div class="label"><span>Brillo</span><strong>{{ brightness() }}%</strong></div>
           <input type="range" min="1" max="100" [ngModel]="brightness()"
@@ -54,11 +80,13 @@
         </section>
 
         <section class="panel">
+          @if (!esp()) {
           <div class="seg" role="radiogroup" aria-label="Modo de luz">
             <button [class.active]="mode() === 'color'" (click)="setColor(color())">Color</button>
             <button [class.active]="mode() === 'white'" (click)="setWhite()">Blanco</button>
             <button [class.active]="mode() === 'scene'" (click)="tab.set('scenes')">Escenas</button>
           </div>
+          }
 
           @if (mode() === 'white') {
             @if (hasTemp()) {
@@ -213,8 +241,24 @@
         }
       </section>
 
+      @if (fan()) {
+        <section class="panel">
+          <h2>Emparejar con el receptor</h2>
+          <p class="note">Solo hace falta una vez (o si el abanico dejó de responder). Toca el botón, apaga el abanico
+            desde el interruptor de pared, espera 5 segundos y préndelo: el receptor suena "di di" si nos aceptó.
+            Tu control físico sigue funcionando.</p>
+          <button class="btn wide" [disabled]="pairing() || !online()" [attr.aria-busy]="pairing()" (click)="pair()">
+            @if (pairing()) {<span class="spin" aria-hidden="true"></span>Emparejando (60 s)…} @else {Emparejar}</button>
+        </section>
+      }
       <section class="panel list">
         <div class="item"><div><strong>Modelo</strong></div><span class="val">{{ d()!.model }}</span></div>
+        @if (esp()) {
+          <div class="item"><div><strong>Placa</strong></div><span class="val">{{ d()!.uid }}</span></div>
+          <div class="item"><div><strong>Estado de la placa</strong></div>
+            <span class="val">{{ online() ? 'En línea' : 'Sin conexión' }}</span></div>
+          @if (d()!.mac) { <div class="item"><div><strong>MAC</strong></div><span class="val">{{ d()!.mac }}</span></div> }
+        } @else {
         <div class="item"><div><strong>Firmware</strong></div><span class="val">{{ d()!.firmware || '—' }}</span></div>
         <div class="item"><div><strong>Señal Wi-Fi</strong></div>
           <span class="val bars" [attr.aria-label]="'Señal ' + signalBars() + ' de 4'">
@@ -231,12 +275,13 @@
           <div><strong>Red Wi-Fi</strong><small>Cámbiala si cambiaste de router o de contraseña</small></div>
           <span class="val">Cambiar ›</span>
         </a>
+        }
       </section>
 
       <section class="panel danger-zone">
         <h2>Zona peligrosa</h2>
         @if (!confirmUnbind()) {
-          <p class="note">Desvincular quita el aparato de tu cuenta. Para volver a usarlo, agrégalo de nuevo con el botón + (por Bluetooth, en Chrome).</p>
+          <p class="note">@if (esp()) {Quita el aparato de la placa. Puedes volver a agregarlo desde Placas ESP32.} @else {Desvincular quita el aparato de tu cuenta. Para volver a usarlo, agrégalo de nuevo con el botón + (por Bluetooth, en Chrome).}</p>
           <button class="btn danger wide" (click)="confirmUnbind.set(true)">Desvincular aparato</button>
         } @else {
           <p class="note">Escribe <strong>{{ d()!.name }}</strong> para confirmar.</p>

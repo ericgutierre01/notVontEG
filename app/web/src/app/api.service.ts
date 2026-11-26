@@ -14,6 +14,16 @@ export interface Device {
   points: Record<string, DataPoint>;
 }
 
+export interface Hub {
+  id: number; name: string; online: boolean; lastSeen: string | null; pending: boolean;
+  /** MACs de tiras LED que la placa ve cerca y aún no están agregadas */
+  seen: string[];
+  devices: { id: string; name: string; kind: 'fan' | 'strip' }[];
+}
+
+/** Código de 6 dígitos para configurar una placa (vence en `minutes`). */
+export interface HubCode { id: number; code: string; minutes: number; }
+
 const TOKEN_KEY = 'vont_token';
 
 @Injectable({ providedIn: 'root' })
@@ -81,6 +91,25 @@ export class Api {
     return this.guard(this.http.post<{ uid: string }>(`${this.base}/devices/bind`,
       { productCode, mac }, { headers: this.headers }));
   }
+  // ---------- placas ESP32 (abanico, tira LED) ----------
+  hubs() {
+    return this.guard(this.http.get<Hub[]>(`${this.base}/hubs`, { headers: this.headers }));
+  }
+  createHub(name: string) {
+    return this.guard(this.http.post<HubCode>(`${this.base}/hubs`, { name }, { headers: this.headers }));
+  }
+  hubCode(id: number) {
+    return this.guard(this.http.post<HubCode>(`${this.base}/hubs/${id}/code`, {}, { headers: this.headers }));
+  }
+  deleteHub(id: number) {
+    return this.guard(this.http.delete(`${this.base}/hubs/${id}`, { headers: this.headers }));
+  }
+  addHubDevice(hubId: number, body: { kind: 'fan' | 'strip'; name: string; mac?: string; remoteId?: string }) {
+    return this.guard(this.http.post<{ id: string }>(`${this.base}/hubs/${hubId}/devices`, body, { headers: this.headers }));
+  }
+  pairFan(id: string) {
+    return this.guard(this.http.post<{ seconds: number }>(`${this.base}/hubs/pair/${id}`, {}, { headers: this.headers }));
+  }
   unbind(id: string, confirmName: string) {
     return this.guard(this.http.delete(`${this.base}/devices/${id}`,
       { headers: this.headers, body: { confirmName } }));
@@ -113,7 +142,10 @@ export function withOverrides(d: Device): Device {
 }
 
 // ---------- helpers de presentación compartidos ----------
-export const isBulb = (d: Device) => d.model.toUpperCase().startsWith('SLB');
+export const isBulb = (d: Device) => d.model.toUpperCase().startsWith('SLB') || d.model === 'ESP-STRIP';
+/** Aparato controlado por una placa ESP32 (no por la nube de Topband). */
+export const isEsp = (d: Device) => d.id.startsWith('esp-');
+export const isFan = (d: Device) => d.model === 'ESP-FAN';
 export const val = (d: Device, k: string) => d.points[k]?.value ?? null;
 export const isOn = (d: Device) => val(d, 'power_onoff') === 'true';
 export const has = (d: Device, k: string) => k in d.points;

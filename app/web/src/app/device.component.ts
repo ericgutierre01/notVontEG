@@ -3,7 +3,7 @@ import { Component, OnDestroy, computed, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import {
-  Api, Device, glow, has, hexRgbInt, isBulb, isOn, mode, remember, rgbHex, val, withOverrides,
+  Api, Device, glow, has, hexRgbInt, isBulb, isEsp, isFan, isOn, mode, remember, rgbHex, val, withOverrides,
 } from './api.service';
 import { DeviceIcon } from './device-icon.component';
 import { PRESET_COLORS, SCENE_GROUPS } from './scenes';
@@ -44,6 +44,10 @@ export class DeviceComponent implements OnDestroy {
   readonly presets = PRESET_COLORS;
 
   bulb = computed(() => !!this.d() && isBulb(this.d()!));
+  /** Abanico o tira por placa ESP32: solo control y ajustes; el estado es el último pedido. */
+  esp = computed(() => !!this.d() && isEsp(this.d()!));
+  fan = computed(() => !!this.d() && isFan(this.d()!));
+  pairing = signal(false);
   on = computed(() => !!this.d() && isOn(this.d()!));
   online = computed(() => !!this.d()?.online);
   mode = computed(() => this.d() ? mode(this.d()!) : 'color');
@@ -68,7 +72,9 @@ export class DeviceComponent implements OnDestroy {
     const s = this.d()?.signal ?? -100;
     return s > -55 ? 4 : s > -65 ? 3 : s > -75 ? 2 : 1;
   });
-  tabs = computed<{ key: Tab; label: string }[]>(() => this.bulb()
+  tabs = computed<{ key: Tab; label: string }[]>(() => this.esp()
+    ? [{ key: 'control', label: 'Control' }, { key: 'settings', label: 'Ajustes' }]
+    : this.bulb()
     ? [{ key: 'control', label: 'Control' }, { key: 'scenes', label: 'Escenas' },
        { key: 'schedule', label: 'Horario' }, { key: 'settings', label: 'Ajustes' }]
     : [{ key: 'control', label: 'Control' }, { key: 'schedule', label: 'Horario' },
@@ -136,7 +142,23 @@ export class DeviceComponent implements OnDestroy {
       : { power_onoff: true, brightness: n });
   }
   setColor(hex: string) {
-    this.send({ power_onoff: true, warm_switch: false, work_mode: 2, color_data: hexRgbInt(hex) });
+    this.send(this.esp()
+      ? { power_onoff: true, color_data: hexRgbInt(hex) }
+      : { power_onoff: true, warm_switch: false, work_mode: 2, color_data: hexRgbInt(hex) });
+  }
+
+  // ---------- abanico (placa ESP32) ----------
+  speed = computed(() => Number(this.v('fan_speed') ?? 0));
+  setSpeed(n: number) { this.send({ fan_speed: n }); }
+  toggle(k: 'light' | 'fan_reverse' | 'breeze') { this.send({ [k]: this.v(k) !== 'true' }); }
+  pair() {
+    const d = this.d();
+    if (!d) return;
+    this.pairing.set(true);
+    this.api.pairFan(d.id).subscribe({
+      next: () => setTimeout(() => this.pairing.set(false), 60000),
+      error: e => { this.pairing.set(false); this.flash(e.error?.error ?? 'No se pudo emparejar'); },
+    });
   }
   setWhite() {
     this.send({ power_onoff: true, warm_switch: true, brightness: this.brightness() });

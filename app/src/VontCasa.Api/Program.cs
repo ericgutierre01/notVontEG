@@ -27,6 +27,8 @@ builder.Services.AddSingleton<CryptoService>();
 builder.Services.AddSingleton<JwtService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<VontSessionService>();
+builder.Services.AddSingleton<HubQueue>();
+builder.Services.AddScoped<EspDeviceService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o =>
@@ -55,6 +57,17 @@ builder.Services.AddRateLimiter(o =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(15) }));
     // Vincular por MAC no tiene prueba de posesión (limitación del protocolo de Topband):
     // se limita por usuario para que no sirva para probar MACs en masa.
+    // Canje del código de 6 dígitos de una placa: sin límite se podría adivinar
+    // Por IP y además un tope global (contra muchas IPs a la vez): ~60 intentos por media hora
+    // frente a 1.000.000 de códigos posibles.
+    o.AddPolicy("claim", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(10) }));
+    o.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        ctx.Request.Path.StartsWithSegments("/api/hub/claim")
+            ? RateLimitPartition.GetFixedWindowLimiter("claim-global",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(10) })
+            : RateLimitPartition.GetNoLimiter("otros"));
     o.AddPolicy("bind", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
             ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",

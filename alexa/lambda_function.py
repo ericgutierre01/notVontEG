@@ -6,6 +6,8 @@ el editor en línea de AWS Lambda (runtime Python 3.12), sin subir ningún .zip.
 Variables de entorno (las pones TÚ en la consola de AWS Lambda):
   TOPBAND_USER = correo de tu cuenta Vont
   TOPBAND_PASS = contraseña de tu cuenta Vont
+  NOTVONT_API  = (opcional) URL del API de Not Vont EG, p. ej. https://tu-dominio.com/api
+                 Con ella aparecen también los aparatos de las placas ESP32 (abanico, tira LED).
 
 Protocolo Topband extraído del APK com.vont.smartlight (ver PROTOCOL.md del repo).
 Account linking de Alexa: Login with Amazon (el token se ignora; skill personal).
@@ -20,6 +22,7 @@ import socket
 import ssl
 import struct
 import time
+import urllib.error
 import urllib.request
 import uuid
 
@@ -76,6 +79,125 @@ def _devices(token):
             if k in p:
                 return p[k]
     return p if isinstance(p, list) else []
+
+
+# ------------------------------------------ Not Vont EG (aparatos de placas ESP32)
+_NV = {"token": None}
+
+
+def _nv_call(method, path, body=None):
+    """Llama al API de Not Vont EG con la misma cuenta Vont; renueva la sesión si vence."""
+    base = os.environ.get("NOTVONT_API", "").rstrip("/")
+    for attempt in (0, 1):
+        if not _NV["token"]:
+            req = urllib.request.Request(base + "/auth/login", method="POST",
+                data=json.dumps({"username": os.environ["TOPBAND_USER"],
+                                 "password": os.environ["TOPBAND_PASS"]}).encode(),
+                headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=12) as r:
+                _NV["token"] = json.loads(r.read().decode())["token"]
+        req = urllib.request.Request(base + path, method=method,
+            data=json.dumps(body).encode() if body is not None else None,
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + _NV["token"]})
+        try:
+            with urllib.request.urlopen(req, timeout=12) as r:
+                return json.loads(r.read().decode() or "{}")
+        except urllib.error.HTTPError as e:
+            if e.code == 401 and attempt == 0:
+                _NV["token"] = None
+                continue
+            raise
+
+
+def _esp_devices():
+    if not os.environ.get("NOTVONT_API"):
+        return []
+    try:
+        return [d for d in _nv_call("GET", "/devices")["devices"] if d["id"].startswith("esp-")]
+    except Exception:
+        logger.exception("no se pudo leer Not Vont EG")  # sin el servidor, al menos los Vont siguen
+        return []
+
+
+def _esp_set(dev_id, points):
+    if not re.match(r"^esp-[0-9]{1,9}$", dev_id):
+        raise RuntimeError("id inválido")
+    _nv_call("POST", f"/devices/{dev_id}/dp", {"points": [{"name": k, "value": v} for k, v in points.items()]})
+
+
+def _fan_speed_cap():
+    return {"type": "AlexaInterface", "interface": "Alexa.RangeController", "version": "3",
+            "instance": "Fan.Speed",
+            "properties": {"supported": [{"name": "rangeValue"}], "proactivelyReported": False, "retrievable": True},
+            "capabilityResources": {"friendlyNames": [{"@type": "asset", "value": {"assetId": "Alexa.Setting.FanSpeed"}}]},
+            "configuration": {"supportedRange": {"minimumValue": 1, "maximumValue": 6, "precision": 1},
+                              "presets": [
+                                  {"rangeValue": 1, "presetResources": {"friendlyNames": [
+                                      {"@type": "asset", "value": {"assetId": "Alexa.Value.Minimum"}},
+                                      {"@type": "asset", "value": {"assetId": "Alexa.Value.Low"}}]}},
+                                  {"rangeValue": 6, "presetResources": {"friendlyNames": [
+                                      {"@type": "asset", "value": {"assetId": "Alexa.Value.Maximum"}},
+                                      {"@type": "asset", "value": {"assetId": "Alexa.Value.High"}}]}}]}}
+
+
+def _esp_endpoints():
+    base = [{"type": "AlexaInterface", "interface": "Alexa", "version": "3"},
+            _cap("Alexa.PowerController", [{"name": "powerState"}]),
+            _cap("Alexa.EndpointHealth", [{"name": "connectivity"}])]
+    eps = []
+    for d in _esp_devices():
+        common = {"manufacturerName": "Not Vont EG", "cookie": {"esp": d["id"]}}
+        if d["model"] == "ESP-FAN":
+            # dos aparatos para Alexa: el abanico (aspas, velocidad) y su luz
+            eps.append({**common, "endpointId": d["id"], "friendlyName": d["name"],
+                        "description": "Abanico (placa ESP32)", "displayCategories": ["FAN"],
+                        "cookie": {"esp": d["id"], "part": "fan"}, "capabilities": base + [_fan_speed_cap()]})
+            eps.append({**common, "endpointId": d["id"] + "-luz", "friendlyName": "Luz " + d["name"],
+                        "description": "Luz del abanico (placa ESP32)", "displayCategories": ["LIGHT"],
+                        "cookie": {"esp": d["id"], "part": "light"}, "capabilities": base})
+        else:
+            eps.append({**common, "endpointId": d["id"], "friendlyName": d["name"],
+                        "description": "Tira LED (placa ESP32)", "displayCategories": ["LIGHT"],
+                        "capabilities": base + [_cap("Alexa.BrightnessController", [{"name": "brightness"}]),
+                                                _cap("Alexa.ColorController", [{"name": "color"}])]})
+    return eps
+
+
+def _esp_handle(directive, ns, name, ck):
+    dev, part = ck["esp"], ck.get("part")
+    if ns == "Alexa.PowerController":
+        on = name == "TurnOn"
+        if part == "light":
+            _esp_set(dev, {"light": on})
+        elif part == "fan":
+            # shortcut: prende en velocidad 3 (el abanico no informa su última velocidad)
+            _esp_set(dev, {"fan_speed": 3} if on else {"fan_speed": 0})
+        else:
+            _esp_set(dev, {"power_onoff": on})
+        return _resp(directive, "Alexa.PowerController", "powerState", "ON" if on else "OFF")
+    if ns == "Alexa.RangeController" and part == "fan":
+        p = directive["payload"]
+        speed = p["rangeValue"] if name == "SetRangeValue" else None
+        if speed is None:  # AdjustRangeValue ("más rápido"): parte de la velocidad guardada
+            cur = int(_nv_call("GET", f"/devices/{dev}")["points"]["fan_speed"]["value"] or 0)
+            speed = cur + int(p["rangeValueDelta"])
+        speed = max(1, min(6, int(speed)))
+        _esp_set(dev, {"fan_speed": speed})
+        r = _resp(directive, "Alexa.RangeController", "rangeValue", speed)
+        r["context"]["properties"][0]["instance"] = "Fan.Speed"
+        return r
+    if ns == "Alexa.BrightnessController":
+        pct = int(directive["payload"]["brightness"])
+        _esp_set(dev, {"power_onoff": True, "brightness": max(1, pct)})
+        return _resp(directive, "Alexa.BrightnessController", "brightness", pct)
+    if ns == "Alexa.ColorController":
+        hsb = directive["payload"]["color"]
+        r, g, b = colorsys.hsv_to_rgb(hsb["hue"] / 360.0, hsb["saturation"], hsb["brightness"])
+        _esp_set(dev, {"power_onoff": True, "color_data": int(r * 255) << 16 | int(g * 255) << 8 | int(b * 255)})
+        return _resp(directive, "Alexa.ColorController", "color", hsb)
+    if ns == "Alexa" and name == "ReportState":
+        return _resp(directive, "Alexa.PowerController", "powerState", "ON")
+    return _err(directive, "INVALID_DIRECTIVE", f"no soportado: {ns}/{name}")
 
 
 # ------------------------------------------------------------- MQTT mínimo
@@ -180,6 +302,7 @@ def _discover():
                     "cookie": {"productId": d["productId"], "uid": d["gatewayUid"],
                                "model": model},
                     "capabilities": caps})
+    eps += _esp_endpoints()
     return {"event": {"header": _header("Alexa.Discovery", "Discover.Response"),
                       "payload": {"endpoints": eps}}}
 
@@ -217,8 +340,10 @@ def lambda_handler(event, context):
     try:
         if ns == "Alexa.Discovery":
             return _discover()
-        sess = _login()
         ck = directive["endpoint"]["cookie"]
+        if "esp" in ck:
+            return _esp_handle(directive, ns, name, ck)
+        sess = _login()
         pid, uid = ck["productId"], ck["uid"]
         if ns == "Alexa.PowerController":
             on = name == "TurnOn"

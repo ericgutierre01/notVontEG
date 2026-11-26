@@ -68,6 +68,11 @@ function accountName(): string {
               Cambiar nombre
             </button>
           }
+          <a class="menu-item" role="menuitem" routerLink="/esp">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>
+            Placas ESP32
+          </a>
           @if (installable()) {
             <button class="menu-item" role="menuitem" (click)="install(); menu.set(false)">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"

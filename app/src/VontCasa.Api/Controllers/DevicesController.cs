@@ -9,7 +9,7 @@ namespace VontCasa.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/devices")]
-public class DevicesController(VontSessionService sessions, TopbandService topband) : ControllerBase
+public class DevicesController(VontSessionService sessions, TopbandService topband, EspDeviceService esp, Data.AppDbContext db) : ControllerBase
 {
     int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -21,6 +21,8 @@ public class DevicesController(VontSessionService sessions, TopbandService topba
         "power_onoff", "brightness", "color_data", "warm_switch", "temp_value",
         "work_mode", "scence_id", "DIY_scene", "general_timer",
         "vacation_mode", "Vacation_mode", "Plug_status_light", "Timer_message", "Auto_message",
+        // aparatos de placa ESP32 (abanico)
+        "light", "fan_speed", "fan_reverse", "breeze",
     ];
 
     /// <summary>Lista con estado real (online, encendido, brillo, color...) de cada aparato.</summary>
@@ -31,12 +33,15 @@ public class DevicesController(VontSessionService sessions, TopbandService topba
         if (token is null) return Unauthorized();
         var devices = await topband.GetDevicesAsync(token, ct);
         var details = await Task.WhenAll(devices.Select(d => topband.GetDetailAsync(token, d.Id, ct)));
-        return Ok(new { devices = details.Where(d => d is not null) });
+        var espDevices = await esp.ListAsync(UserId, ct);
+        return Ok(new { devices = details.Where(d => d is not null).Concat(espDevices) });
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> Detail(string id, CancellationToken ct)
     {
+        if (EspDeviceService.IsEsp(id))
+            return await esp.FindAsync(UserId, id, ct) is { } e ? Ok(EspDeviceService.ToDetail(e)) : NotFound();
         var token = await sessions.GetTokenAsync(UserId, ct);
         if (token is null) return Unauthorized();
         var d = await topband.GetDetailAsync(token, id, ct);
@@ -55,6 +60,16 @@ public class DevicesController(VontSessionService sessions, TopbandService topba
         if (dto.Points is not { Count: > 0 and <= 8 }) return BadRequest(new { error = "sin funciones" });
         if (dto.Points.FirstOrDefault(p => !Writable.Contains(p.Name)) is { } bad)
             return BadRequest(new { error = $"función no permitida: {bad.Name}" });
+
+        if (EspDeviceService.IsEsp(id))
+        {
+            var e = await esp.FindAsync(UserId, id, ct);
+            if (e is null) return NotFound();
+            if (!EspDeviceService.HubOnline(e.Hub!)) return Conflict(new { error = "la placa está sin conexión" });
+            if (await esp.ApplyAsync(e, dto.Points.Select(p => (p.Name, p.Value)), ct) is { } err) return BadRequest(new { error = err });
+            await sessions.LogAsync(UserId, e.Name, string.Join(",", dto.Points.Select(p => p.Name)), ct);
+            return Ok(new { ok = true });
+        }
 
         var token = await sessions.GetTokenAsync(UserId, ct);
         if (token is null) return Unauthorized();
@@ -118,6 +133,16 @@ public class DevicesController(VontSessionService sessions, TopbandService topba
     [HttpDelete("{id}")]
     public async Task<IActionResult> Unbind(string id, [FromBody] UnbindDto dto, CancellationToken ct)
     {
+        if (EspDeviceService.IsEsp(id))
+        {
+            var e = await esp.FindAsync(UserId, id, ct);
+            if (e is null) return NotFound();
+            if (dto.ConfirmName != e.Name) return BadRequest(new { error = "el nombre de confirmación no coincide" });
+            db.HubDevices.Remove(e);
+            await db.SaveChangesAsync(ct);
+            await sessions.LogAsync(UserId, e.Name, "unbind", ct);
+            return Ok(new { ok = true });
+        }
         var token = await sessions.GetTokenAsync(UserId, ct);
         if (token is null) return Unauthorized();
         var d = await topband.GetDetailAsync(token, id, ct);
@@ -135,6 +160,15 @@ public class DevicesController(VontSessionService sessions, TopbandService topba
     {
         var name = dto.Name?.Trim() ?? "";
         if (name.Length is 0 or > 64) return BadRequest(new { error = "nombre inválido (1-64 caracteres)" });
+        if (EspDeviceService.IsEsp(id))
+        {
+            var e = await esp.FindAsync(UserId, id, ct);
+            if (e is null) return NotFound();
+            e.Name = name;
+            await db.SaveChangesAsync(ct);
+            await sessions.LogAsync(UserId, name, "rename", ct);
+            return Ok(new { ok = true });
+        }
         var token = await sessions.GetTokenAsync(UserId, ct);
         if (token is null) return Unauthorized();
         if (!await topband.RenameAsync(token, id, name, ct)) return BadRequest(new { error = "no se pudo renombrar" });

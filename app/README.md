@@ -8,6 +8,7 @@ encendido/apagado, brillo y color.
   Topband (login REST con token + control por MQTT/TLS). Ver `../alexa/PROTOCOL.md`.
 - **Frontend:** Angular 19 (standalone).
 - **Base de datos:** SQL Server — usuarios (contraseña Vont cifrada con AES-GCM) y auditoría.
+- **Placa ESP32 (opcional):** puente Bluetooth para un abanico ZhiMei y tiras LED ELK-BLEDOM. Ver `esp32/README.md`.
 
 ## Desarrollo (local)
 

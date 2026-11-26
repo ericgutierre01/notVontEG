@@ -84,6 +84,98 @@ namespace VontCasa.Api.Data.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("VontCasa.Api.Data.Hub", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AppUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ClaimExpires")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ClaimHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("KeyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("LastSeen")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Seen")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppUserId");
+
+                    b.HasIndex("KeyHash")
+                        .IsUnique();
+
+                    b.ToTable("Hubs");
+                });
+
+            modelBuilder.Entity("VontCasa.Api.Data.HubDevice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("HubId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Mac")
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("RemoteId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RemoteIndex")
+                        .HasColumnType("int");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<int>("TxCount")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HubId");
+
+                    b.ToTable("HubDevices");
+                });
+
             modelBuilder.Entity("VontCasa.Api.Data.ActivityLog", b =>
                 {
                     b.HasOne("VontCasa.Api.Data.AppUser", "AppUser")
@@ -95,9 +187,36 @@ namespace VontCasa.Api.Data.Migrations
                     b.Navigation("AppUser");
                 });
 
+            modelBuilder.Entity("VontCasa.Api.Data.Hub", b =>
+                {
+                    b.HasOne("VontCasa.Api.Data.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
+                });
+
+            modelBuilder.Entity("VontCasa.Api.Data.HubDevice", b =>
+                {
+                    b.HasOne("VontCasa.Api.Data.Hub", "Hub")
+                        .WithMany("Devices")
+                        .HasForeignKey("HubId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Hub");
+                });
+
             modelBuilder.Entity("VontCasa.Api.Data.AppUser", b =>
                 {
                     b.Navigation("Logs");
+                });
+
+            modelBuilder.Entity("VontCasa.Api.Data.Hub", b =>
+                {
+                    b.Navigation("Devices");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,0 +1,6 @@
+{
+  "ssid": "NOMBRE_DE_TU_WIFI",
+  "password": "CLAVE_DE_TU_WIFI",
+  "server": "https://tu-dominio.com/api",
+  "code": "123456"
+}

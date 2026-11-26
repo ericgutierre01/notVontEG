@@ -49,7 +49,9 @@
               {
                 "glob": "**/*",
                 "input": "public"
-              }
+              },
+              { "glob": "{main,setup,screen,ssd1306}.py", "input": "../esp32", "output": "esp32" },
+              { "glob": "*.bin", "input": "../esp32/firmware", "output": "esp32" }
             ],
             "styles": [
               "src/styles.css"
